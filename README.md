@@ -13,6 +13,8 @@ search. Fragments split across panels are merged back into a single number and
 validated against the ISO 6346 check digit.
 
 **No PyTorch required.** The runtime is `onnxruntime` + `numpy` + `pillow`.
+A [local server](#local-server) with a review dashboard ships in the same
+package — `pip install "cnrocr[server]"`.
 
 This repository also hosts the model weights as release assets — see
 [Model weights](#model-weights).
@@ -35,11 +37,12 @@ separate graph for each orientation:
 ## Install
 
 ```bash
-pip install cnrocr           # CPU
-pip install cnrocr[gpu]      # NVIDIA CUDA via onnxruntime-gpu
+pip install cnrocr             # CPU
+pip install "cnrocr[gpu]"      # NVIDIA CUDA via onnxruntime-gpu
+pip install "cnrocr[server]"   # local REST API + dashboard
 ```
 
-Python 3.10–3.13 on linux x86_64/aarch64, macOS arm64, Windows amd64.
+Python 3.10–3.13 on linux x86_64/aarch64, macOS arm64/x86_64, Windows amd64.
 
 The weights (~113 MB) are **not** bundled in the wheel. They are downloaded on
 first use and cached locally:
@@ -79,6 +82,7 @@ reported as a result:
 | `cnrocr models status` | Show what is cached and where |
 | `cnrocr check` | Diagnose install, execution providers, cache |
 | `cnrocr license` | Show the licence and today's usage |
+| `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
 
 Useful flags: `--device auto|cpu|cuda`, `--threshold 0.5` (detection score
 floor), `--review-confidence 0.7`, `--registry bic_codes.txt`, and
@@ -146,10 +150,132 @@ ocr = ContainerOCR(registry=OwnerCodeRegistry.from_file("bic_codes.txt"))
 
 The list is not shipped with the package.
 
+---
+
+## Local server
+
+A REST API and a browser dashboard, both served from your own machine. Images
+never leave it.
+
+```bash
+pip install "cnrocr[server]"
+cnrocr server start                  # http://127.0.0.1:8000
+cnrocr server start --daemon         # background; `cnrocr server stop` to end it
+```
+
+The models load once at startup and are shared by every request. Open the
+address for the dashboard, or `/docs` for the interactive API.
+
+![dashboard](docs/dashboard.png)
+
+### The review queue
+
+The dashboard leads with the queue rather than with a file picker, because the
+interesting question is not "what did it read" but "which ones should a human
+look at".
+
+Results below `--review-confidence` (default `0.7`) are collected instead of
+being silently trusted. On our validation set every misread scored below 0.7
+while correct reads sat near 1.0, so the threshold catches the errors and sends
+only a small fraction of good reads along with them — the run above is 60
+images with one flagged, at confidence 0.036.
+
+Confirming a correction stores the corrected value. That record is the only
+evidence of which misreadings repeat, and therefore of what is worth fixing.
+Corrections are validated against the ISO 6346 check digit too: a typo must not
+acquire a "checked by a human" stamp on its way downstream.
+
+### At the gate
+
+<table>
+<tr>
+<td width="330"><img src="docs/dashboard-mobile.png" width="310" alt="the dashboard on a phone"></td>
+<td valign="top">
+
+The layout is mobile first. The camera button photographs a container and
+uploads it directly, which is enough to work the queue where you stand.
+
+```bash
+cnrocr server start --host 0.0.0.0 --token "$(openssl rand -base64 24)"
+```
+
+Binding to `0.0.0.0` exposes the server to everyone who can reach the host, so
+set a token when you do. The server says so at startup if you forget; it does
+not refuse to start, because a closed network is a legitimate setup.
+
+</td>
+</tr>
+</table>
+
+### API
+
+```bash
+curl -X POST -F "file=@gate_cam.jpg" http://127.0.0.1:8000/api/read
+```
+
+```json
+{
+  "detection_id": 41,
+  "device": "cuda",
+  "containers": [{"number": "TGHU8913889", "iso_type": "22G1",
+                  "confidence": 0.9997, "needs_review": false}],
+  "elapsed_ms": 38.4
+}
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/read` | One image (multipart). `/api/read/base64` and `/api/read/binary` take other shapes |
+| `POST /api/read/batch` | Several images in one call |
+| `POST /api/multiview` | Several views of the **same** container, fused into one answer |
+| `GET /api/review` | The queue of results a human should look at |
+| `POST /api/review/{id}` | Record the verdict; corrections are check-digit validated |
+| `GET /api/history` | Past detections, with filters and CSV/JSON export |
+| `GET /api/health` | Liveness, version, and which device is actually in use |
+| `GET /api/stats` | Counts, review rate, remaining quota |
+
+`/api/health` reports the device that onnxruntime **actually** chose next to the
+one you asked for. When a CUDA major version does not match, onnxruntime warns
+and quietly falls back to CPU; without this you would only notice that
+inference got slow.
+
+### Configuration
+
+Flags, a YAML file, or the environment — later wins, and flags win over all.
+
+```yaml
+server:
+  host: 127.0.0.1
+  port: 8000
+  api_token: ""            # required in practice once host is not loopback
+models:
+  device: auto             # auto | cpu | cuda
+  workers: 4
+  review_confidence: 0.7
+storage:
+  save_images: true        # the review screen needs the photo
+  max_history: 5000
+```
+
+Every setting also reads from `CNROCR_SERVER_<NAME>`. An unknown key in the
+YAML is an error rather than a silent no-op — a typo in `api_token` must not
+quietly leave authentication off.
+
+```bash
+cnrocr server status        # is it up, on what device, since when
+cnrocr server list          # every instance this machine knows about
+cnrocr server logs -f       # follow
+cnrocr server read img.jpg  # send a file to a running instance
+cnrocr server stop
+```
+
+---
+
 ## Evaluation limit
 
-Without a licence, cnrocr processes **10 images per day**. The counter is per
-image, not per call, and resets at 00:00 UTC.
+Without a licence, cnrocr processes **30 images per day**. The counter is per
+image, not per call, and resets at 00:00 UTC. The library, the CLI and the
+server all draw on the same daily budget.
 
 ```bash
 cnrocr license      # licence status and today's usage
