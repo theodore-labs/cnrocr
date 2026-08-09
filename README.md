@@ -266,26 +266,94 @@ cnrocr server status        # is it up, on what device, since when
 cnrocr server list          # every instance this machine knows about
 cnrocr server logs -f       # follow
 cnrocr server read img.jpg  # send a file to a running instance
+cnrocr server install       # a unit file that starts it at boot
 cnrocr server stop
+```
+
+### Telling something else
+
+The API is pull-only, which is no use to a barrier or a terminal operating
+system. Point the server at a URL and every result is POSTed there as it
+happens:
+
+```bash
+cnrocr server start --webhook https://gate.internal/cnrocr
+```
+
+```json
+{"event": "read", "server": "cnrocr", "ts": "...", "data": { ... }}
+```
+
+`event` is `read` for a recognition and `review` for a human verdict, so a
+receiver can supersede what it was told when the read first came in. Delivery
+never blocks or fails a request — a detection that was stored succeeded
+whether or not anyone could be told. Failures are retried and then counted in
+`/api/stats`, because a webhook that quietly stopped working is otherwise
+invisible. If deliveries must not be lost, poll `/api/history` and treat the
+webhook as a latency improvement rather than a transport.
+
+### Running unattended
+
+A gate PC reboots. `cnrocr server install` prints a systemd unit, a launchd
+plist or a `schtasks` command for the machine it is run on, along with the one
+command that installs it. It does not install anything itself — that needs
+administrator rights, and both the unit and the command should be read first.
+It also lists what will break after the next reboot but works now, such as a
+licence key that only exists in the current shell.
+
+Photographs kept for the review screen are capped separately from the history,
+since a row costs a few hundred bytes and the picture beside it costs a few
+hundred kilobytes:
+
+```yaml
+storage:
+  save_images: true
+  max_history: 5000        # rows
+  max_images: 2000         # photographs; they age out first
 ```
 
 ---
 
-## Evaluation limit
+## Licensing
 
-Without a licence, cnrocr processes **30 images per day**. The counter is per
-image, not per call, and resets at 00:00 UTC. The library, the CLI and the
-server all draw on the same daily budget.
+Licences are priced by **daily volume**: a licence raises the daily image
+limit to the tier you are on, from a few hundred a day up to unlimited.
+Nothing else changes — the software is the same either way, there is no
+account to create, and nothing phones home.
+
+Email **vislab2026@gmail.com** with a rough idea of your daily volume and we
+will tell you the tier and the price. Keys are issued by return.
+
+> **Multi-view counts per view.** `read_multiview` with three photographs of
+> one container spends three images, not one. Three hundred containers shot
+> from three angles is 900 images a day, not 300 — size it from images, not
+> from containers.
 
 ```bash
-cnrocr license      # licence status and today's usage
+cnrocr license      # which tier, and today's usage
 ```
 
-A call that would exceed the quota processes nothing and exits with code 3 —
-all or nothing, so a refused call costs no quota.
+The counter is per image, not per call, and resets at 00:00 UTC. The library,
+the CLI and the server all draw on the same daily budget. A call that would
+exceed it processes nothing and exits with code 3 — all or nothing, so a
+refused call costs none of your allowance. The server answers **429** rather
+than 500, since the request was fine and so is the server.
 
-To request an unrestricted licence, email **vislab2026@gmail.com** with your
-name, organisation and intended use. You will receive a key:
+`cnrocr check` warns for thirty days before a licence expires. A renewal
+should not be discovered by a system that stopped working.
+
+## Evaluation
+
+Without a licence, cnrocr processes **30 images per day** — enough to see
+whether it reads your photographs, not enough to wire up the API and put load
+through it.
+
+Email the same address for a **free 14-day evaluation key with no daily
+limit**. Nothing to negotiate, no card. When it expires the key stops applying
+and you are back to 30 a day; nothing breaks and there is nothing to
+uninstall.
+
+A key looks like this:
 
 ```bash
 # Windows
