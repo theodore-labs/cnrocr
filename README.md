@@ -38,7 +38,7 @@ separate graph for each orientation:
 
 ```bash
 pip install cnrocr             # CPU
-pip install "cnrocr[gpu]"      # NVIDIA CUDA via onnxruntime-gpu
+pip install "cnrocr[gpu]"      # NVIDIA CUDA — see the note below
 pip install "cnrocr[server]"   # local REST API + dashboard
 ```
 
@@ -46,6 +46,18 @@ Python 3.10–3.13 on linux x86_64/aarch64, macOS arm64/x86_64, Windows amd64.
 
 The weights (~113 MB) are **not** bundled in the wheel. They are downloaded on
 first use and cached locally:
+
+### About the GPU extra
+
+`onnxruntime-gpu` does not carry the CUDA runtime, so `cnrocr[gpu]` alone is
+often not enough. With the runtime missing or a different major version,
+onnxruntime prints an error, **carries on using the CPU**, and the only
+symptom is that inference is slow.
+
+- Remove the CPU build first. The two share one directory and cannot both own
+  it: `pip uninstall -y onnxruntime && pip install "cnrocr[gpu]"`
+- Check what you got. `cnrocr check` prints the providers actually in use, and
+  `--device cuda` warns when it lands on the CPU anyway.
 
 ```bash
 cnrocr models download       # optional — happens automatically otherwise
@@ -82,6 +94,7 @@ reported as a result:
 | `cnrocr models status` | Show what is cached and where |
 | `cnrocr check` | Diagnose install, execution providers, cache |
 | `cnrocr license` | Show the licence and today's usage |
+| `cnrocr license --set KEY` | Register a key (or paste it into the dashboard) |
 | `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
 
 Useful flags: `--device auto|cpu|cuda`, `--threshold 0.5` (detection score
@@ -179,6 +192,25 @@ being silently trusted. On our validation set every misread scored below 0.7
 while correct reads sat near 1.0, so the threshold catches the errors and sends
 only a small fraction of good reads along with them — the run above is 60
 images with one flagged, at confidence 0.036.
+
+### Which stage failed
+
+Clicking a photograph opens it with the **detected regions drawn on top** and
+a line saying where the reading stopped:
+
+| | |
+|---|---|
+| **Nothing detected** | no region was found, so the recogniser was never given anything |
+| **Detected but not read** | the region was located and came back empty — the detector is not at fault |
+| a number and its confidence | read, with the check digit and any merge shown |
+
+Both of the first two look like "no number" on a list, and they are different
+faults in different models. Telling them apart is what decides whether a
+problem is worth chasing, and — if it ever comes to retraining — which data
+would help.
+
+History carries a date range, a search, CSV export, and deletion of selected
+rows. Deleting takes the stored photographs with it and cannot be undone.
 
 Confirming a correction stores the corrected value. That record is the only
 evidence of which misreadings repeat, and therefore of what is worth fixing.
