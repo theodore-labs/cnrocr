@@ -202,6 +202,12 @@ address for the dashboard, or `/docs` for the interactive API.
 
 ![dashboard](docs/dashboard.png)
 
+### Linking to a tab
+
+Each tab has an address, so `http://gate-pc:8000/#history` opens there. Useful
+when telling somebody which screen to look at, and the browser's back button
+now returns to the tab you came from rather than leaving the dashboard.
+
 ### The review queue
 
 The dashboard leads with the queue rather than with a file picker, because the
@@ -487,6 +493,11 @@ of each camera's last frame, and the System tab shows it:
 gate-pc-1   last seen 4s ago    rtsp://cam-rear/stream — 0.4s ago
                                 rtsp://cam-left/stream — no frames
 ```
+
+The header carries a shorter version of the same thing on every screen —
+`4 cameras`, or `3/4 cameras` when one has stopped delivering, or `cameras ?`
+when no agent has reported for a minute. It is hidden entirely if you have
+never run `watch`.
 
 **A quiet gate and a dead agent look identical** from a dashboard. The only
 thing that separates them is how long it has been since the agent last said
