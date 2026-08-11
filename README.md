@@ -81,7 +81,7 @@ is something to try before you point this at a camera:
 
 ```bash
 cnrocr samples --dir photos
-cnrocr read photos/wiki_01.jpg photos/wiki_02.jpg photos/wiki_03.jpg
+cnrocr read photos/*.jpg
 ```
 
 ```
@@ -92,9 +92,6 @@ wiki_03.jpg  [  OK  ] SUDU1782454  22G1  conf 0.997
 ```
 
 One of the three goes to review on purpose — see [Sample images](#sample-images).
-
-Expanding `*.jpg` is your shell's job, so list the files on Windows, where
-`cmd` and PowerShell leave wildcards to the program.
 
 Anything the pipeline is not confident about is marked instead of being
 reported as a result:
@@ -109,7 +106,7 @@ reported as a result:
 | Command | What it does |
 |---|---|
 | `cnrocr read a.jpg b.jpg` | Read one or more images |
-| `cnrocr read a.jpg b.jpg --json` | Emit JSON, including box coordinates |
+| `cnrocr read *.jpg --json` | Emit JSON, including box coordinates |
 | `cnrocr multiview c1.jpg c2.jpg c3.jpg` | Fuse several views of **one** container |
 | `cnrocr models download` | Fetch the weights ahead of time |
 | `cnrocr models status` | Show what is cached and where |
@@ -119,6 +116,7 @@ reported as a result:
 | `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
 | `cnrocr watch --source webcam:0` | Watch a camera and read what a trigger catches — see [Cameras](#cameras) |
 | `cnrocr samples --dir ./photos` | Download a few container photographs to try |
+| `cnrocr export --out ./dataset` | Write what has been read as a training set — see [Collecting data](#collecting-data) |
 
 Useful flags: `--device auto|cpu|cuda`, `--threshold 0.5` (detection score
 floor), `--review-confidence 0.7`, `--registry bic_codes.txt`, and
@@ -467,6 +465,33 @@ photographed steeply from above and to one side are the ones that get misread,
 and a misreading that happens to satisfy the ISO 6346 check digit will not be
 caught by it.
 
+### Leaving it running
+
+A gate PC reboots, and an agent that does not come back takes the lane with
+it. `--service` writes a boot unit for the command you just typed:
+
+```bash
+cnrocr watch --source rtsp://cam/stream --trigger http --service
+```
+
+It prints the unit and the one command that installs it, and installs nothing
+itself — registering a service needs administrator rights, and a tool that
+quietly takes them is not one to run on a machine that matters. systemd,
+launchd and Windows scheduled tasks are all covered; `--trigger key` is
+refused with an explanation, because a service has no keyboard.
+
+While it runs, the agent reports to the server every ten seconds with the age
+of each camera's last frame, and the System tab shows it:
+
+```
+gate-pc-1   last seen 4s ago    rtsp://cam-rear/stream — 0.4s ago
+                                rtsp://cam-left/stream — no frames
+```
+
+**A quiet gate and a dead agent look identical** from a dashboard. The only
+thing that separates them is how long it has been since the agent last said
+anything, so that is what the screen shows.
+
 ### Options
 
 | | |
@@ -474,6 +499,51 @@ caught by it.
 | `--server URL` | Where to send. Default `http://127.0.0.1:8000` |
 | `--token KEY` | If the server requires one. `CNROCR_API_TOKEN` also works |
 | `--trigger-port N` | Port for `--trigger http`. Default 8100 |
+| `--service` | Write a boot unit instead of running |
+
+## Collecting data
+
+Every reading the server handles is already kept: the photograph under
+`images/`, and beside it the number, the ISO type, the confidence, the review
+verdict and **the box coordinates** the detector produced. What was missing
+was a way to get at it without opening the SQLite file by hand.
+
+```bash
+cnrocr export --out ./dataset --since 2026-08-01
+```
+
+```
+dataset/
+  images/           the photographs
+  labels.jsonl      one record per reading
+```
+
+```json
+{"id": 48, "images": ["00000048_0.jpg", "00000048_1.jpg"],
+ "ts": "2026-08-11T08:30:36+00:00", "kind": "multiview",
+ "number": "CPMU2984019", "iso_type": "22G1", "confidence": 0.707,
+ "needs_review": false,
+ "boxes": [{"label": "container_no", "box": [726.5, 286.2, 1059.9, 349.2]},
+           {"label": "iso_type", "box": [873.8, 366.6, 978.6, 426.8]}],
+ "corrected": "MPMU2984019", "agrees": false}
+```
+
+**A multiview stays one record.** Several photographs of one container that
+disagree are the interesting case, and splitting them into separate rows would
+throw away the only thing that makes them worth keeping.
+
+**A correction sits beside the machine's answer, not on top of it.** When
+`agrees` is false you are looking at a labelled error, which is worth more
+than either number alone.
+
+`--reviewed-only` keeps just the readings a human confirmed or corrected —
+the part with a verified label on it. Reviewed photographs are never removed
+by the retention cap either; they are the most valuable pictures on the disk
+and used to be the first ones deleted.
+
+The server does not have to be running; this reads the database directly. And
+nothing is uploaded anywhere. It writes a folder, and what happens to that
+folder is between you and whoever owns the containers.
 
 ## Licensing
 
