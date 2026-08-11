@@ -40,6 +40,7 @@ separate graph for each orientation:
 pip install cnrocr             # CPU
 pip install "cnrocr[gpu]"      # NVIDIA CUDA — see the note below
 pip install "cnrocr[server]"   # local REST API + dashboard
+pip install "cnrocr[camera]"   # webcams and RTSP streams — see Cameras
 ```
 
 Python 3.10–3.13 on linux x86_64/aarch64, macOS arm64/x86_64, Windows amd64.
@@ -65,6 +66,13 @@ cnrocr check                 # verify the install, providers and cache
 ```
 
 ## Quick start
+
+No container photographs to hand? Fetch a few:
+
+```bash
+cnrocr samples --dir ./photos
+cnrocr read ./photos/*.jpg
+```
 
 ```bash
 cnrocr read gate_cam.jpg
@@ -96,6 +104,8 @@ reported as a result:
 | `cnrocr license` | Show the licence and today's usage |
 | `cnrocr license --set KEY` | Register a key (or paste it into the dashboard) |
 | `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
+| `cnrocr watch --source webcam:0` | Watch a camera and read what a trigger catches — see [Cameras](#cameras) |
+| `cnrocr samples --dir ./photos` | Download a few container photographs to try |
 
 Useful flags: `--device auto|cpu|cuda`, `--threshold 0.5` (detection score
 floor), `--review-confidence 0.7`, `--registry bic_codes.txt`, and
@@ -346,6 +356,106 @@ storage:
 
 ---
 
+## Cameras
+
+The server answers questions; nothing in it goes and looks. `cnrocr watch`
+does that — it holds cameras open and reads whatever a trigger catches.
+
+```bash
+pip install "cnrocr[camera]"
+cnrocr server start --daemon
+cnrocr watch --source webcam:0 --trigger key
+```
+
+```
+watching 1 source(s) -> http://127.0.0.1:8000
+  webcam:0
+press Enter to read, q to quit
+
+  14:50:04  1 view   MSMU7761306  0.999   219 ms
+  14:50:11  1 view   TNSU1018530  0.010?  204 ms
+```
+
+A `?` marks a reading that went to the review queue. Everything `watch` sends
+appears in the dashboard as it arrives — History, the review queue and the live
+log — so the usual way to demonstrate this is with the browser open beside the
+terminal.
+
+`watch` and the server are separate processes on purpose: the agent touches
+hardware and the server does not, so the server stays something you can move
+into a container or onto another machine without thinking about drivers.
+
+### Sources
+
+| `--source` | |
+|---|---|
+| `webcam:0` | A camera on this machine. `webcam:1` for the second one |
+| `rtsp://user:pass@host:554/stream` | A network camera |
+| `./photos` | A folder of images, or a single image file — replayed in a loop |
+
+A folder needs nothing installed beyond cnrocr itself, so you can see the whole
+path work before deciding what camera to buy.
+
+RTSP streams are opened over TCP rather than UDP. Lost packets show up as
+smeared blocks across the very characters being read.
+
+### Triggers
+
+| `--trigger` | |
+|---|---|
+| `key` *(default)* | Press Enter to read. What you want at a desk |
+| `interval:5` | Every five seconds. Unattended demonstrations |
+| `http` | Opens a small endpoint; something else decides when |
+
+```bash
+cnrocr watch --source rtsp://cam/stream --trigger http --trigger-port 8100
+curl -X POST http://127.0.0.1:8100/          # the gate controller does this
+```
+
+The HTTP trigger is the integration path. Gate controllers, PLCs and the
+Ethernet I/O modules that turn a loop detector's dry contact into a network
+event all speak HTTP or can be made to, which means no driver has to ship for
+any of them.
+
+**Why not connect when the trigger arrives?** RTSP negotiation plus the wait
+for a keyframe costs one to three seconds, and by then the truck has gone.
+Frames are decoded continuously and the most recent second is kept, so a
+trigger picks from pictures that have already arrived — the sharpest one near
+the moment it fired.
+
+### Several cameras, one answer
+
+A gate lane points four to six cameras at the same container and whichever face
+is readable wins. Repeat `--source` and they are treated as one lane:
+
+```bash
+cnrocr watch \
+  --source rtsp://cam-rear/stream \
+  --source rtsp://cam-left/stream \
+  --source rtsp://cam-right/stream \
+  --trigger http
+```
+
+Every camera contributes a frame from the moment the trigger fired; they are
+read together and fused into a single answer. **This costs one read, not
+three** — adding cameras improves the result without changing the bill. If one
+camera is down the others still answer.
+
+### Mounting
+
+Aim the camera as square to the container face as the site allows. Numbers
+photographed steeply from above and to one side are the ones that get misread,
+and a misreading that happens to satisfy the ISO 6346 check digit will not be
+caught by it.
+
+### Options
+
+| | |
+|---|---|
+| `--server URL` | Where to send. Default `http://127.0.0.1:8000` |
+| `--token KEY` | If the server requires one. `CNROCR_API_TOKEN` also works |
+| `--trigger-port N` | Port for `--trigger http`. Default 8100 |
+
 ## Licensing
 
 Licences are priced by **daily volume**: a licence raises the daily image
@@ -440,11 +550,23 @@ library version. Older sets remain available indefinitely.
 
 ## Sample images
 
-The photographs above come from the
+```bash
+cnrocr samples --dir ./photos
+```
+
+Three container photographs, so there is something to try before pointing this
+at your own cameras. One reads cleanly, one carries an ISO type, and one goes
+to the review queue — which is the part worth seeing. A reader that never says
+"I am not sure" is not safer, only quieter.
+
+They are not bundled in the wheel and they are **not ours**: they are used
+under Creative Commons licences and are not covered by the cnrocr licence.
+`cnrocr samples` writes a `CREDITS.md` beside them naming each photographer
+and licence. If you republish one, those terms come with it.
+
+The screenshots above use images from the
 [Container Number Recognition](https://www.kaggle.com/datasets/johnkhanhnguyen/container-number-recognition)
-dataset by johnkhanhnguyen, used under the MIT licence. It is a convenient
-source of test images if you want to try the library before pointing it at your
-own cameras.
+dataset by johnkhanhnguyen, under the MIT licence.
 
 ## License
 
