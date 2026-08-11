@@ -67,13 +67,6 @@ cnrocr check                 # verify the install, providers and cache
 
 ## Quick start
 
-No container photographs to hand? Fetch a few:
-
-```bash
-cnrocr samples --dir ./photos
-cnrocr read ./photos/*.jpg
-```
-
 ```bash
 cnrocr read gate_cam.jpg
 ```
@@ -82,6 +75,26 @@ cnrocr read gate_cam.jpg
 gate_cam.jpg  (172.1 ms)
   [  OK  ] TEMU3108252  22G1  conf 1.000
 ```
+
+**No container photographs to hand?** `cnrocr samples` fetches three, so there
+is something to try before you point this at a camera:
+
+```bash
+cnrocr samples --dir photos
+cnrocr read photos/wiki_01.jpg photos/wiki_02.jpg photos/wiki_03.jpg
+```
+
+```
+wiki_01.jpg  [  OK  ] MSMU7761306  45G1  conf 0.999
+wiki_02.jpg  [REVIEW] TNSU1018530  22G1  conf 0.010
+                      -> low confidence (0.010 < 0.7)
+wiki_03.jpg  [  OK  ] SUDU1782454  22G1  conf 0.997
+```
+
+One of the three goes to review on purpose — see [Sample images](#sample-images).
+
+Expanding `*.jpg` is your shell's job, so list the files on Windows, where
+`cmd` and PowerShell leave wildcards to the program.
 
 Anything the pipeline is not confident about is marked instead of being
 reported as a result:
@@ -96,7 +109,7 @@ reported as a result:
 | Command | What it does |
 |---|---|
 | `cnrocr read a.jpg b.jpg` | Read one or more images |
-| `cnrocr read *.jpg --json` | Emit JSON, including box coordinates |
+| `cnrocr read a.jpg b.jpg --json` | Emit JSON, including box coordinates |
 | `cnrocr multiview c1.jpg c2.jpg c3.jpg` | Fuse several views of **one** container |
 | `cnrocr models download` | Fetch the weights ahead of time |
 | `cnrocr models status` | Show what is cached and where |
@@ -393,8 +406,14 @@ into a container or onto another machine without thinking about drivers.
 | `rtsp://user:pass@host:554/stream` | A network camera |
 | `./photos` | A folder of images, or a single image file — replayed in a loop |
 
-A folder needs nothing installed beyond cnrocr itself, so you can see the whole
-path work before deciding what camera to buy.
+A folder needs nothing installed beyond cnrocr itself, so you can watch the
+whole path work before deciding what camera to buy — and `cnrocr samples` will
+give you one:
+
+```bash
+cnrocr samples --dir photos
+cnrocr watch --source photos --trigger key
+```
 
 RTSP streams are opened over TCP rather than UDP. Lost packets show up as
 smeared blocks across the very characters being read.
