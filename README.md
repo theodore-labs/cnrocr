@@ -116,6 +116,7 @@ reported as a result:
 | `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
 | `cnrocr watch --source webcam:0` | Watch a camera and read what a trigger catches — see [Cameras](#cameras) |
 | `cnrocr fake-plc --to URL` | Knock on a trigger the way a gate controller would, and name what came back |
+| `cnrocr fake-gate --port 9000` | Receive webhooks the way the gate system would, and print each one |
 | `cnrocr samples --dir ./photos` | Download a few container photographs to try |
 | `cnrocr export --out ./dataset` | Write what has been read as a training set — see [Collecting data](#collecting-data) |
 
@@ -516,6 +517,46 @@ reached and nothing was listening — a process or port problem. A timeout means
 the host was not reached at all — a firewall or the wrong address. They are
 fixed by different people, and this says which one you have.
 
+`fake-plc` stands at the front of the lane. `fake-gate` stands at the back:
+
+```bash
+cnrocr fake-gate --port 9000 --token SECRET
+```
+
+```
+  12:04:38  #1   read    number=not read              id=60  auth Bearer ...cret
+  12:04:38  #2   review  number=TGHU8913889  by ana   id=60  auth Bearer ...cret
+```
+
+It prints every delivery the server posts onward, which is otherwise something
+you can only infer. **`--fail 500` makes it refuse everything**, so you can see
+what the server does about a receiver that is down — the retries, and the
+`webhook` chip going red — without arranging for a real outage. And it says
+whether the token arrived, which is invisible from the sending end and is the
+detail most often wrong.
+
+### Finding the server
+
+`cnrocr check` reports what is installed and then what is running, and ends
+with the commands to type next — carrying the port it just found rather than
+the one the documentation happens to use:
+
+```
+server
+  http://127.0.0.1:8010        cnrocr 0.5.7
+
+next, to exercise the rest
+  cnrocr watch --source webcam:0 --trigger http --trigger-host 0.0.0.0 --server http://127.0.0.1:8010
+  cnrocr fake-plc --to http://10.0.0.31:8100 --key
+  cnrocr fake-gate --port 9000
+```
+
+`watch` uses the same knowledge: with one cnrocr server running on this
+machine it sends there, whatever port that is, and only falls back to 8000
+when there is nothing to find or more than one candidate. A server answering
+on a port is not enough — it has to identify itself as cnrocr, so another
+program that happens to serve `/api/health` is never mistaken for one.
+
 ### Several cameras, one answer
 
 A gate lane points four to six cameras at the same container and whichever face
@@ -578,7 +619,9 @@ frames arrive, and they arrive constantly. A trigger that has been quiet for
 three hours is either a quiet gate or a fallen cable, and no screen can tell
 those apart. So the chip says only what it can defend — the port is bound, this
 long since the last knock, and **`io 47/46`** when a knock produced no read,
-which is the one unambiguous fault. If the agent itself goes quiet the chip
+which is the one unambiguous fault. It calls silence a problem only where
+somebody has said what silence means, with `--trigger-expect`; there is no
+default, because a busy gate is quiet for minutes and a yard for days. If the agent itself goes quiet the chip
 becomes `io ?`, because a green light over a dead agent is the worst thing a
 header can show.
 
@@ -595,6 +638,7 @@ anything, so that is what the screen shows.
 | `--trigger-port N` | Port for `--trigger http`. Default 8100 |
 | `--trigger-host A` | What it listens on. Default is this machine only; `0.0.0.0` opens it to the network |
 | `--trigger-token T` | Require a token on the trigger. Worth setting whenever the host is not loopback |
+| `--trigger-expect N` | How long this gate can reasonably be quiet. Past that the dashboard calls the trigger overdue. No default |
 | `--check` | Test the cameras, the trigger and the server, then exit |
 | `--service` | Write a boot unit instead of running |
 
