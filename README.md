@@ -115,6 +115,7 @@ reported as a result:
 | `cnrocr license --set KEY` | Register a key (or paste it into the dashboard) |
 | `cnrocr server start` | Run the local API and dashboard — see [Local server](#local-server) |
 | `cnrocr watch --source webcam:0` | Watch a camera and read what a trigger catches — see [Cameras](#cameras) |
+| `cnrocr fake-plc --to URL` | Knock on a trigger the way a gate controller would, and name what came back |
 | `cnrocr samples --dir ./photos` | Download a few container photographs to try |
 | `cnrocr export --out ./dataset` | Write what has been read as a training set — see [Collecting data](#collecting-data) |
 
@@ -238,11 +239,19 @@ would help.
 
 History carries a date range, a search, CSV export, and deletion of selected
 rows. Deleting takes the stored photographs with it and cannot be undone.
+Clicking an ISO code in the table narrows the list to it.
 
 Confirming a correction stores the corrected value. That record is the only
 evidence of which misreadings repeat, and therefore of what is worth fixing.
 Corrections are validated against the ISO 6346 check digit too: a typo must not
 acquire a "checked by a human" stamp on its way downstream.
+
+**Both numbers survive, and either one finds the row.** History shows the
+corrected value with the original beneath it, and searching for either returns
+the same reading. That is not a courtesy to the machine: the webhook carried
+the original downstream at the moment of the reading, so it is the key that
+matches whatever the gate system recorded. Exports lead with `final_number`,
+which is the human's answer where there is one.
 
 ### At the gate
 
@@ -431,8 +440,13 @@ smeared blocks across the very characters being read.
 | `http` | Opens a small endpoint; something else decides when |
 
 ```bash
-cnrocr watch --source rtsp://cam/stream --trigger http --trigger-port 8100
-curl -X POST http://127.0.0.1:8100/          # the gate controller does this
+cnrocr watch --source rtsp://cam/stream --trigger http --trigger-host 0.0.0.0
+```
+
+```
+POST http://10.0.0.31:8100/ to read, Ctrl-C to quit
+
+trigger  0.0.0.0:8100   hits 47  reads 47  last 3s ago from 10.0.0.7
 ```
 
 The HTTP trigger is the integration path. Gate controllers, PLCs and the
@@ -440,11 +454,67 @@ Ethernet I/O modules that turn a loop detector's dry contact into a network
 event all speak HTTP or can be made to, which means no driver has to ship for
 any of them.
 
+**It listens on this machine only until you say otherwise.** `--trigger-host
+0.0.0.0` opens it to the network, and `--trigger-token` puts a bearer token on
+it, which is worth doing at the same time: the endpoint takes a photograph on
+request. When you do open it the agent prints **the address a controller can
+actually be configured with** rather than `0.0.0.0`, because that is the string
+somebody is about to type into a device.
+
+**Knocks are counted, with who sent them.** `hits` against `reads` is the
+number that separates the two faults you cannot otherwise tell apart: a trigger
+that never arrives, and one that arrives while the camera is down.
+
 **Why not connect when the trigger arrives?** RTSP negotiation plus the wait
 for a keyframe costs one to three seconds, and by then the truck has gone.
 Frames are decoded continuously and the most recent second is kept, so a
 trigger picks from pictures that have already arrived — the sharpest one near
 the moment it fired.
+
+### Proving the wiring
+
+A gate has two connections and both are silent when they work. These check
+them.
+
+```bash
+cnrocr watch --source rtsp://cam/stream --trigger http --check
+```
+
+```
+sources
+  rtsp://cam/stream                     ok      1920x1080
+trigger in
+  listening 0.0.0.0:8100                ok
+    reachable at 10.0.0.31:8100
+  waiting 10s for a knock...
+    none arrived. Try: cnrocr fake-plc --to http://10.0.0.31:8100
+server out
+  http://10.0.0.31:8000                 ok      cnrocr 0.5.6
+  its webhook                           ok      sent 412  failed 0
+```
+
+It exits with a nonzero status if anything is wrong, so an installation script
+can use it.
+
+That answers "is the port open" **from the agent's side**. Whether the
+controller's machine can reach it is a different question, and only that
+machine can answer it:
+
+```bash
+cnrocr fake-plc --to http://10.0.0.31:8100 --key    # knock on every Enter
+```
+
+```
+  knock 1  ok       202  11 ms
+  knock 2  FAILED   connection refused. The host is up and nothing is
+                    listening there. Is cnrocr watch running with
+                    --trigger http?
+```
+
+**Refused and timed out are different faults.** Refused means the host was
+reached and nothing was listening — a process or port problem. A timeout means
+the host was not reached at all — a firewall or the wrong address. They are
+fixed by different people, and this says which one you have.
 
 ### Several cameras, one answer
 
@@ -499,6 +569,19 @@ The header carries a shorter version of the same thing on every screen —
 when no agent has reported for a minute. It is hidden entirely if you have
 never run `watch`.
 
+Two more chips sit beside it, on the same rule: **shown only once there is
+something to report.** `io` follows the gate trigger, and `webhook` follows
+what the server is posting onward.
+
+The trigger is the harder one to state honestly. A camera is healthy when
+frames arrive, and they arrive constantly. A trigger that has been quiet for
+three hours is either a quiet gate or a fallen cable, and no screen can tell
+those apart. So the chip says only what it can defend — the port is bound, this
+long since the last knock, and **`io 47/46`** when a knock produced no read,
+which is the one unambiguous fault. If the agent itself goes quiet the chip
+becomes `io ?`, because a green light over a dead agent is the worst thing a
+header can show.
+
 **A quiet gate and a dead agent look identical** from a dashboard. The only
 thing that separates them is how long it has been since the agent last said
 anything, so that is what the screen shows.
@@ -510,6 +593,9 @@ anything, so that is what the screen shows.
 | `--server URL` | Where to send. Default `http://127.0.0.1:8000` |
 | `--token KEY` | If the server requires one. `CNROCR_API_TOKEN` also works |
 | `--trigger-port N` | Port for `--trigger http`. Default 8100 |
+| `--trigger-host A` | What it listens on. Default is this machine only; `0.0.0.0` opens it to the network |
+| `--trigger-token T` | Require a token on the trigger. Worth setting whenever the host is not loopback |
+| `--check` | Test the cameras, the trigger and the server, then exit |
 | `--service` | Write a boot unit instead of running |
 
 ## Collecting data
