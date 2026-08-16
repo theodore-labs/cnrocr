@@ -238,6 +238,26 @@ faults in different models. Telling them apart is what decides whether a
 problem is worth chasing, and — if it ever comes to retraining — which data
 would help.
 
+The labels are translucent, and **`b` hides the overlay altogether**. A box
+label has to sit somewhere, and on a container the ISO marking is printed
+directly below the number, so the label belonging to one lands on the other.
+Sometimes the only thing wanted is the photograph.
+
+**Every row carries the pixels its number was read from.** A column of small
+crops, cut out of the stored photographs, sits beside the numbers:
+
+```
+#  When      Read                Number        ISO    Conf
+61 11:20:25  [BCDU 2110 432 ]    BCDU2110432   22G1   0.991
+60 11:19:02  [TKRU 3039 470 ]    TKRU3039470   22G1   1.000
+```
+
+Noticing that a reading looks wrong is something you do while scanning a list.
+Confirming it used to mean opening the photograph and finding the markings,
+once per suspicious row; now it means looking one column to the left. Hovering
+enlarges the crop. Numbers **written vertically** — which plenty are — are
+turned on their side so they still fit a row.
+
 History carries a date range, a search, CSV export, and deletion of selected
 rows. Deleting takes the stored photographs with it and cannot be undone.
 Clicking an ISO code in the table narrows the list to it.
