@@ -204,6 +204,25 @@ address for the dashboard, or `/docs` for the interactive API.
 
 ![dashboard](docs/dashboard.png)
 
+### English or Korean
+
+A switch beside the theme selector in the header. **English is the default and
+stays it** — the CLI, this page and any screenshot forwarded to a supplier are
+English, and a dashboard that quietly followed the browser would leave two
+people describing the same screen in different words.
+
+Container numbers, ISO codes and timestamps are never translated. Neither are
+the logs: a log is the thing you attach to a support request, and whoever reads
+it next may not read Korean.
+
+Review reasons are translated, which took more than the label did. The reason
+used to exist only as an English sentence, written into each row and then
+matched on as a substring by the review filter — so the wording could not be
+changed, let alone translated, without the filter quietly returning nothing.
+Rows now carry the reason as a code and the numbers it cites, and the screen
+phrases it. Rows written by earlier versions keep their sentence and still
+answer the filter.
+
 ### Linking to a tab
 
 Each tab has an address, so `http://gate-pc:8000/#history` opens there. Useful
